@@ -11,7 +11,7 @@ interface PatientDashboardProps {
   addAuditLog: (action: string, details: string) => void;
 }
 
-export function PatientDashboard({ patient, onBookAppointment, addAuditLog }: PatientDashboardProps) {
+export function PatientDashboard({ patient, onUpdatePatient, onBookAppointment, addAuditLog }: PatientDashboardProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'history' | 'prescriptions' | 'telemedicine'>('overview');
   const historyViewedRef = useRef(false);
 

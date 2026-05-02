@@ -100,7 +100,7 @@ export default function App() {
         
         if (appointmentsRes.data && patientsRes.data) {
           const fetchedAppointments: Appointment[] = appointmentsRes.data.map(a => {
-            const patient = patientsRes.data?.find(p => p.id === a.patient_id);
+            const patient = (patientsRes.data as any[])?.find(p => p.id === a.patient_id);
             return {
               id: a.id,
               patientId: a.patient_id,
@@ -240,14 +240,15 @@ export default function App() {
       </header>
 
       <main className="pt-24 px-6 pb-8 max-w-[1600px] mx-auto">
-        {currentUser.role === 'patient' && (
+        {currentUser && currentUser.role === 'patient' && (
           <PatientDashboard
             patient={patients.find(p => p.id === currentUser.id) || patients[0] || emptyPatient}
+            onUpdatePatient={updatePatient}
             onBookAppointment={bookAppointment}
             addAuditLog={addAuditLog}
           />
         )}
-        {currentUser.role === 'doctor' && (
+        {currentUser && currentUser.role === 'doctor' && (
           <DoctorDashboard
             patients={patients}
             appointments={appointments}
@@ -255,7 +256,7 @@ export default function App() {
             addAuditLog={addAuditLog}
           />
         )}
-        {currentUser.role === 'admin' && (
+        {currentUser && currentUser.role === 'admin' && (
           <AdminDashboard
             auditLogs={auditLogs}
             patients={patients}
