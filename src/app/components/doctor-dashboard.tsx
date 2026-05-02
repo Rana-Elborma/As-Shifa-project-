@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Calendar, FileText, Users, Pill, Video, Plus, Search, CheckCircle2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { TelemedicineCall } from './telemedicine-call';
+import { supabase } from '../../supabase';
 import type { Patient, Appointment } from '../App';
 
 interface DoctorDashboardProps {
@@ -73,7 +74,7 @@ export function DoctorDashboard({ patients, appointments, onUpdatePatient, addAu
     setTeleAppointment(null);
   };
 
-  const handleUpdateMedicalHistory = (patientId: string, diagnosis: string, treatment: string) => {
+  const handleUpdateMedicalHistory = async (patientId: string, diagnosis: string, treatment: string) => {
     const patient = patients.find(p => p.id === patientId);
     if (!patient) return;
 
@@ -83,11 +84,21 @@ export function DoctorDashboard({ patients, appointments, onUpdatePatient, addAu
       diagnosis,
       treatment,
       doctorName: currentUserName,
-      notes: 'Updated during consultation'
+      notes: 'Updated during consultation',
     };
 
+    await supabase.from('medical_history').insert([{
+      id: newRecord.id,
+      patient_id: patientId,
+      date: newRecord.date,
+      diagnosis,
+      treatment,
+      notes: newRecord.notes,
+      doctor_name: currentUserName,
+    }]);
+
     onUpdatePatient(patientId, {
-      medicalHistory: [...patient.medicalHistory, newRecord]
+      medicalHistory: [...patient.medicalHistory, newRecord],
     });
 
     addAuditLog('UPDATE_MEDICAL_HISTORY', `${currentUserName} updated medical history for patient ${patient.name}`);
@@ -96,7 +107,7 @@ export function DoctorDashboard({ patients, appointments, onUpdatePatient, addAu
     setSelectedPatient(prev => prev ? { ...prev, medicalHistory: [...prev.medicalHistory, newRecord] } : null);
   };
 
-  const handleIssuePrescription = (e: React.SyntheticEvent) => {
+  const handleIssuePrescription = async (e: React.SyntheticEvent) => {
     e.preventDefault();
 
     const patient = patients.find(p => p.id === selectedPatientId);
@@ -109,11 +120,22 @@ export function DoctorDashboard({ patients, appointments, onUpdatePatient, addAu
       dosage,
       instructions: `${frequency} for ${duration}. ${prescribeNotes}`.trim(),
       doctorName: currentUserName,
-      status: 'active' as const
+      status: 'active' as const,
     };
 
+    await supabase.from('prescriptions').insert([{
+      id: newPrescription.id,
+      patient_id: selectedPatientId,
+      date: newPrescription.date,
+      medication,
+      dosage,
+      instructions: newPrescription.instructions,
+      doctor_name: currentUserName,
+      status: 'active',
+    }]);
+
     onUpdatePatient(selectedPatientId, {
-      prescriptions: [...patient.prescriptions, newPrescription]
+      prescriptions: [...patient.prescriptions, newPrescription],
     });
 
     addAuditLog('ISSUE_PRESCRIPTION', `${currentUserName} prescribed ${medication} to ${patient.name}`);

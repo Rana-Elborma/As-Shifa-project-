@@ -40,10 +40,12 @@ export default function App() {
   // Extracted so it can be called both on mount and after login
   const fetchData = useCallback(async () => {
     try {
-      const [patientsRes, appointmentsRes, logsRes] = await Promise.all([
+      const [patientsRes, appointmentsRes, logsRes, historyRes, prescriptionsRes] = await Promise.all([
         supabase.from('patients').select('*'),
         supabase.from('appointments').select('*'),
-        supabase.from('audit_logs').select('*').order('created_at', { ascending: false })
+        supabase.from('audit_logs').select('*').order('created_at', { ascending: false }),
+        supabase.from('medical_history').select('*').order('date', { ascending: false }),
+        supabase.from('prescriptions').select('*').order('date', { ascending: false }),
       ]);
 
       if (patientsRes.data) {
@@ -53,9 +55,28 @@ export default function App() {
           dateOfBirth: p.date_of_birth ?? '',
           email: p.email ?? '',
           phone: p.phone ?? '',
-          medicalHistory: [],
+          medicalHistory: (historyRes.data ?? [])
+            .filter(h => h.patient_id === p.id)
+            .map(h => ({
+              id: h.id,
+              date: h.date,
+              diagnosis: h.diagnosis,
+              treatment: h.treatment,
+              notes: h.notes ?? '',
+              doctorName: h.doctor_name,
+            })),
+          prescriptions: (prescriptionsRes.data ?? [])
+            .filter(rx => rx.patient_id === p.id)
+            .map(rx => ({
+              id: rx.id,
+              date: rx.date,
+              medication: rx.medication,
+              dosage: rx.dosage ?? '',
+              instructions: rx.instructions ?? '',
+              doctorName: rx.doctor_name,
+              status: rx.status as 'active' | 'completed',
+            })),
           appointments: [],
-          prescriptions: []
         }));
 
         if (appointmentsRes.data) {
