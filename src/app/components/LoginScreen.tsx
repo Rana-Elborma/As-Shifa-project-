@@ -1,62 +1,80 @@
 import { useState } from 'react';
 import { Heart, Mail, Lock, Shield, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
-import type { User, UserRole } from '../App';
+import { supabase } from '../../supabase';
+import type { User } from '../App';
 
 interface LoginScreenProps {
   onLogin: (user: User) => void;
   onBackToLanding?: () => void;
+  registrationSuccess?: boolean;
 }
 
-export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
+export function LoginScreen({ onLogin, onBackToLanding, registrationSuccess }: LoginScreenProps) {
   const [step, setStep] = useState<'credentials' | 'mfa'>('credentials');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const demoAccounts = [
-    { email: 'patient@asshifa.com', password: 'patient123', role: 'patient' as UserRole, name: 'Ahmed Ali', id: 'P001' },
-    { email: 'patient2@asshifa.com', password: 'patient2123', role: 'patient' as UserRole, name: 'Fatima Hassan', id: 'P002' },
-    { email: 'doctor@asshifa.com', password: 'doctor123', role: 'doctor' as UserRole, name: 'Dr. Sarah Alabkari', id: 'D001' },
-    { email: 'admin@asshifa.com', password: 'admin123', role: 'admin' as UserRole, name: 'Admin User', id: 'A001' }
-  ];
+  // Holds the resolved user between the credentials step and the MFA step
+  const [pendingUser, setPendingUser] = useState<{ id: string; email: string; name: string; role: string } | null>(null);
 
-  const handleCredentialsSubmit = (e: React.FormEvent) => {
+  const handleCredentialsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const account = demoAccounts.find(
-      acc => acc.email === email && acc.password === password && acc.role === selectedRole
-    );
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (account) {
-      setStep('mfa');
-    } else {
-      setError('Invalid credentials. Please try demo accounts.');
+    setLoading(false);
+
+    if (authError || !data.user) {
+      setError('Invalid email or password. Please check your credentials.');
+      return;
     }
+
+    // Check the users table — if no row exists the account was never fully registered
+    const { data: userRecord } = await supabase
+      .from('users')
+      .select('name, role')
+      .eq('id', data.user.id)
+      .single();
+
+    if (!userRecord) {
+      // Auth exists but profile is missing → reject and sign out the session
+      await supabase.auth.signOut();
+      setError('No registered account found for this email. Please sign up first.');
+      setLoading(false);
+      return;
+    }
+
+    setPendingUser({
+      id: data.user.id,
+      email: data.user.email ?? email,
+      name: userRecord.name,
+      role: userRecord.role,
+    });
+    setStep('mfa');
   };
 
   const handleMFASubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (otp.length === 6) {
-      const account = demoAccounts.find(
-        acc => acc.email === email && acc.role === selectedRole
-      );
-
-      if (account) {
-        onLogin({
-          id: account.id,
-          name: account.name,
-          role: account.role,
-          email: account.email
-        });
-      }
-    } else {
+    if (otp.length !== 6) {
       setError('Please enter a valid 6-digit code');
+      return;
+    }
+
+    if (pendingUser) {
+      onLogin({
+        id: pendingUser.id,
+        name: pendingUser.name,
+        role: pendingUser.role as any,
+        email: pendingUser.email,
+      });
     }
   };
 
@@ -88,31 +106,19 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
         </div>
 
         <div className="backdrop-blur-2xl bg-white/70 border border-white/40 rounded-3xl shadow-xl p-8">
+          {/* Registration success banner */}
+          {registrationSuccess && step === 'credentials' && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200 mb-6">
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+              <p className="text-sm text-green-700 font-medium">Account created successfully! Please sign in.</p>
+            </div>
+          )}
+
           {step === 'credentials' ? (
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-foreground mb-2">Welcome Back</h2>
                 <p className="text-sm text-muted-foreground">Sign in to access your account</p>
-              </div>
-
-              <div className="mb-6">
-                <label className="text-sm font-medium text-foreground mb-2 block">I am a</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['patient', 'doctor', 'admin'] as UserRole[]).map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => setSelectedRole(role)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        selectedRole === role
-                          ? 'bg-primary text-white shadow-lg'
-                          : 'bg-white/50 text-muted-foreground hover:bg-white/80'
-                      }`}
-                    >
-                      {role && role.charAt(0).toUpperCase() + role.slice(1)}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <form onSubmit={handleCredentialsSubmit} className="space-y-4">
@@ -124,7 +130,7 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder={`${selectedRole}@asshifa.com`}
+                      placeholder="your@email.com"
                       className="w-full pl-12 pr-4 py-3 rounded-xl border border-white/40 bg-white/50 backdrop-blur-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                       required
                     />
@@ -155,21 +161,12 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
 
                 <Button
                   type="submit"
-                  className="w-full py-6 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold shadow-lg transition-all hover:scale-105"
+                  disabled={loading}
+                  className="w-full py-6 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold shadow-lg transition-all hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  Continue to MFA
+                  {loading ? 'Signing in…' : 'Continue to MFA'}
                 </Button>
               </form>
-
-              <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
-                <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-                <div className="space-y-1 text-xs text-blue-700">
-                  <p>Patient 1 (Ahmed): patient@asshifa.com / patient123</p>
-                  <p>Patient 2 (Fatima): patient2@asshifa.com / patient2123</p>
-                  <p>Doctor: doctor@asshifa.com / doctor123</p>
-                  <p>Admin: admin@asshifa.com / admin123</p>
-                </div>
-              </div>
             </>
           ) : (
             <>
@@ -207,17 +204,13 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
 
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  <p className="text-xs text-green-700">For demo, enter any 6-digit code (e.g., 123456)</p>
+                  <p className="text-xs text-green-700">For demo purposes, enter any 6-digit code (e.g., 123456)</p>
                 </div>
 
                 <div className="flex gap-3">
                   <Button
                     type="button"
-                    onClick={() => {
-                      setStep('credentials');
-                      setOtp('');
-                      setError('');
-                    }}
+                    onClick={() => { setStep('credentials'); setOtp(''); setError(''); }}
                     variant="outline"
                     className="flex-1 py-6 rounded-xl"
                   >

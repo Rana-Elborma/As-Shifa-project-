@@ -58,6 +58,7 @@ export interface Appointment {
 export interface AuditLogEntry {
   id: string;
   timestamp: Date;
+  userId?: string;
   action: string;
   details: string;
   userName: string;
