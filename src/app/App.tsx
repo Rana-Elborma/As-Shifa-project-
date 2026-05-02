@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { LoginScreen } from './components/LoginScreen';
 import { PatientRegistration } from './components/patient-registration';
@@ -9,21 +9,14 @@ import { Heart } from 'lucide-react';
 import { supabase } from '../supabase';
 import type { User, UserRole, Patient, Appointment, AuditLogEntry } from './types';
 
-// As-Shifa Secure Healthcare Management System
 export type { User, UserRole, Patient, Appointment, AuditLogEntry };
 export type ViewMode = 'landing' | 'login' | 'signup';
 
-/**
- * UTILITY: Sorts appointments chronologically by date and then by time
- */
 const sortAppointments = (apts: Appointment[]) => {
   return [...apts].sort((a, b) => {
-    // 1. Sort by Date
     const dateA = new Date(a.date).getTime();
     const dateB = new Date(b.date).getTime();
     if (dateA !== dateB) return dateA - dateB;
-    
-    // 2. Sort by Time (e.g., "09:00 AM")
     const parseTime = (t: string) => {
       if (!t) return 0;
       const [time, period] = t.split(' ');
@@ -42,65 +35,32 @@ export default function App() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
-  // Fallback object for safe rendering if data is missing
-  const emptyPatient: Patient = {
-    id: 'NA',
-    name: 'User',
-    dateOfBirth: '',
-    email: '',
-    phone: '',
-    medicalHistory: [],
-    appointments: [],
-    prescriptions: []
-  };
+  // Extracted so it can be called both on mount and after login
+  const fetchData = useCallback(async () => {
+    try {
+      const [patientsRes, appointmentsRes, logsRes] = await Promise.all([
+        supabase.from('patients').select('*'),
+        supabase.from('appointments').select('*'),
+        supabase.from('audit_logs').select('*').order('created_at', { ascending: false })
+      ]);
 
-  // --- DATABASE SYNC ---
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [patientsRes, appointmentsRes, logsRes] = await Promise.all([
-          supabase.from('patients').select('*'),
-          supabase.from('appointments').select('*'),
-          supabase.from('audit_logs').select('*').order('created_at', { ascending: false })
-        ]);
+      if (patientsRes.data) {
+        const fetchedPatients: Patient[] = patientsRes.data.map(p => ({
+          id: p.id,
+          name: p.name,
+          dateOfBirth: p.date_of_birth ?? '',
+          email: p.email ?? '',
+          phone: p.phone ?? '',
+          medicalHistory: [],
+          appointments: [],
+          prescriptions: []
+        }));
 
-        if (patientsRes.data) {
-          const fetchedPatients = patientsRes.data.map(p => ({
-            id: p.id,
-            name: p.name,
-            dateOfBirth: p.date_of_birth,
-            email: p.email,
-            phone: p.phone,
-            medicalHistory: [], 
-            appointments: [],
-            prescriptions: []
-          }));
-
-          // T3: Add demo patient Fatima Hassan (P002) as a "real" demo user
-          const fatima: Patient = {
-            id: 'P002',
-            name: 'Fatima Hassan',
-            dateOfBirth: '1995-08-20',
-            email: 'patient2@asshifa.com',
-            phone: '+966-55-123-4567',
-            medicalHistory: [],
-            appointments: [],
-            prescriptions: []
-          };
-
-          const finalPatients = fetchedPatients.some(p => p.id === 'P002') 
-            ? fetchedPatients 
-            : [...fetchedPatients, fatima];
-            
-          setPatients(finalPatients);
-        }
-        
-        if (appointmentsRes.data && patientsRes.data) {
+        if (appointmentsRes.data) {
           const fetchedAppointments: Appointment[] = appointmentsRes.data.map(a => {
-            const patient = (patientsRes.data as any[])?.find(p => p.id === a.patient_id);
+            const patient = patientsRes.data.find(p => p.id === a.patient_id);
             return {
               id: a.id,
               patientId: a.patient_id,
@@ -114,35 +74,37 @@ export default function App() {
             };
           });
 
-          const finalAppointments = sortAppointments(fetchedAppointments);
-          setAppointments(finalAppointments);
+          const sorted = sortAppointments(fetchedAppointments);
+          setAppointments(sorted);
 
-          setPatients(prevPatients => prevPatients.map(p => ({
+          setPatients(fetchedPatients.map(p => ({
             ...p,
-            appointments: finalAppointments.filter(apt => apt.patientId === p.id)
+            appointments: sorted.filter(apt => apt.patientId === p.id)
           })));
+        } else {
+          setPatients(fetchedPatients);
         }
-
-        if (logsRes.data) {
-          setAuditLogs(logsRes.data.map(log => ({
-            id: log.id,
-            timestamp: new Date(log.created_at),
-            userId: 'U000',
-            userName: log.user_name,
-            action: log.action,
-            details: log.details,
-            ipAddress: log.ip_address
-          })));
-        }
-      } catch (error) {
-        console.error('Database Connection Error:', error);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchData();
+      if (logsRes.data) {
+        setAuditLogs(logsRes.data.map(log => ({
+          id: log.id,
+          timestamp: new Date(log.created_at),
+          userId: log.user_id ?? '',
+          userName: log.user_name ?? '',
+          action: log.action,
+          details: log.details,
+          ipAddress: log.ip_address ?? ''
+        })));
+      }
+    } catch (error) {
+      console.error('Database Connection Error:', error);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const addAuditLog = (action: string, details: string) => {
     if (!currentUser) return;
@@ -158,9 +120,11 @@ export default function App() {
     setAuditLogs(prev => [newLog, ...prev]);
   };
 
-  const handleLogin = (user: User) => {
+  const handleLogin = async (user: User) => {
     setCurrentUser(user);
-    addAuditLog('LOGIN', `Successful login with MFA verification`);
+    setRegistrationSuccess(false);
+    // Refetch so a newly registered user sees their own data immediately
+    await fetchData();
   };
 
   const handleLogout = () => {
@@ -189,9 +153,9 @@ export default function App() {
     if (data) {
       const savedAppointment = { ...appointment, id: data[0].id };
       setAppointments(prev => sortAppointments([...prev, savedAppointment]));
-      setPatients(prev => prev.map(p => 
+      setPatients(prev => prev.map(p =>
         p.id === dbAppointment.patient_id
-          ? { ...p, appointments: sortAppointments([...(p.appointments || []), savedAppointment]) } 
+          ? { ...p, appointments: sortAppointments([...(p.appointments || []), savedAppointment]) }
           : p
       ));
       addAuditLog('BOOK_APPOINTMENT', `Scheduled ${appointment.type} with ${appointment.doctorName}`);
@@ -203,12 +167,44 @@ export default function App() {
   }
 
   if (!currentUser && currentView === 'login') {
-    return <LoginScreen onLogin={handleLogin} onBackToLanding={() => setCurrentView('landing')} />;
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        onBackToLanding={() => setCurrentView('landing')}
+        registrationSuccess={registrationSuccess}
+      />
+    );
   }
 
   if (!currentUser && currentView === 'signup') {
-    return <PatientRegistration onBackToLanding={() => setCurrentView('landing')} />;
+    return (
+      <PatientRegistration
+        onBackToLanding={() => setCurrentView('landing')}
+        onRegistrationSuccess={() => {
+          setRegistrationSuccess(true);
+          setCurrentView('login');
+        }}
+      />
+    );
   }
+
+  // After all early returns above, currentUser is guaranteed non-null here
+  if (!currentUser) return null;
+
+  // Build the patient object for the logged-in patient.
+  // Use their DB record if it exists; otherwise fall back to their auth data
+  // so a newly registered user NEVER sees another patient's records.
+  const loggedInPatient: Patient =
+    patients.find(p => p.id === currentUser!.id) ?? {
+      id: currentUser!.id,
+      name: currentUser!.name,
+      email: currentUser!.email,
+      phone: '',
+      dateOfBirth: '',
+      medicalHistory: [],
+      appointments: [],
+      prescriptions: []
+    };
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
@@ -230,33 +226,36 @@ export default function App() {
                 <span className="text-xs font-medium text-green-700">Encrypted Session</span>
               </div>
               <div className="text-right">
-                <p className="text-sm font-semibold text-foreground">{currentUser.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
+                <p className="text-sm font-semibold text-foreground">{currentUser!.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">{currentUser!.role}</p>
               </div>
-              <button onClick={handleLogout} className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium transition-all">Logout</button>
+              <button onClick={handleLogout} className="px-4 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium transition-all">
+                Logout
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="pt-24 px-6 pb-8 max-w-[1600px] mx-auto">
-        {currentUser && currentUser.role === 'patient' && (
+        {currentUser.role === 'patient' && (
           <PatientDashboard
-            patient={patients.find(p => p.id === currentUser.id) || patients[0] || emptyPatient}
+            patient={loggedInPatient}
             onUpdatePatient={updatePatient}
             onBookAppointment={bookAppointment}
             addAuditLog={addAuditLog}
           />
         )}
-        {currentUser && currentUser.role === 'doctor' && (
+        {currentUser.role === 'doctor' && (
           <DoctorDashboard
             patients={patients}
             appointments={appointments}
             onUpdatePatient={updatePatient}
             addAuditLog={addAuditLog}
+            currentUserName={currentUser.name}
           />
         )}
-        {currentUser && currentUser.role === 'admin' && (
+        {currentUser.role === 'admin' && (
           <AdminDashboard
             auditLogs={auditLogs}
             patients={patients}
