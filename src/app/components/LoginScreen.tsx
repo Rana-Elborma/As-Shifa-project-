@@ -18,6 +18,7 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
 
   const demoAccounts = [
     { email: 'patient@asshifa.com', password: 'patient123', role: 'patient' as UserRole, name: 'Ahmed Ali', id: 'P001' },
+    { email: 'patient2@asshifa.com', password: 'patient2123', role: 'patient' as UserRole, name: 'Fatima Hassan', id: 'P002' },
     { email: 'doctor@asshifa.com', password: 'doctor123', role: 'doctor' as UserRole, name: 'Dr. Sarah Alabkari', id: 'D001' },
     { email: 'admin@asshifa.com', password: 'admin123', role: 'admin' as UserRole, name: 'Admin User', id: 'A001' }
   ];
@@ -163,7 +164,8 @@ export function LoginScreen({ onLogin, onBackToLanding }: LoginScreenProps) {
               <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-200">
                 <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
                 <div className="space-y-1 text-xs text-blue-700">
-                  <p>Patient: patient@asshifa.com / patient123</p>
+                  <p>Patient 1 (Ahmed): patient@asshifa.com / patient123</p>
+                  <p>Patient 2 (Fatima): patient2@asshifa.com / patient2123</p>
                   <p>Doctor: doctor@asshifa.com / doctor123</p>
                   <p>Admin: admin@asshifa.com / admin123</p>
                 </div>
