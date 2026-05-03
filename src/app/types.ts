@@ -4,7 +4,7 @@
  * Moving them here breaks circular dependencies between App.tsx and components.
  */
 
-export type UserRole = 'patient' | 'doctor' | 'admin';
+export type UserRole = "patient" | "doctor" | "admin" | "receptionist";
 
 export interface User {
   id: string;
