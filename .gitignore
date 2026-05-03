@@ -5,3 +5,4 @@ dist
 *.docx
 *.xlsx
 .DS_Store
+.env.local
