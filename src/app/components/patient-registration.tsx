@@ -20,6 +20,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { supabase } from "../../supabase";
+import { calculatePasswordStrength, isValidEmail, isValidPhone } from "../utils/validation";
 import type { UserRole } from "../App";
 
 interface PatientRegistrationProps {
@@ -58,14 +59,6 @@ export function PatientRegistration({
     confirmPassword?: string;
   }>({});
 
-  const calculatePasswordStrength = (password: string) => {
-    let strength = 0;
-    if (password.length >= 8) strength += 25;
-    if (password.match(/[a-z]/) && password.match(/[A-Z]/)) strength += 25;
-    if (password.match(/\d/)) strength += 25;
-    if (password.match(/[^a-zA-Z\d]/)) strength += 25;
-    return strength;
-  };
 
   const handleChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
@@ -103,10 +96,10 @@ export function PatientRegistration({
     }
     if (!formData.email.trim()) {
       newErrors.email = "Email is required.";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    } else if (!isValidEmail(formData.email)) {
       newErrors.email = "Please enter a valid email address.";
     }
-    if (formData.phone && !/^[\d\s\+\-\(\)]+$/.test(formData.phone)) {
+    if (formData.phone && !isValidPhone(formData.phone)) {
       newErrors.phone = "Phone number must contain only digits, +, -, or parentheses.";
     }
     if (Object.keys(newErrors).length > 0) {
